@@ -1,6 +1,8 @@
 const peg = require("peggy")
 
-main = ws? l:(line nl?)+ ws? {return l}
+main = _ l:lines+ _ {return l}
+
+lines = l:line nl? {return l}
 
 line = nodebreak {return {"type":"nodeBreak"}}
 	/ b:brackets 
@@ -12,38 +14,64 @@ line = nodebreak {return {"type":"nodeBreak"}}
 // top level categories
 comment = "//" comm:words { return {"type": "comment", "content": comm}; }
 brackets = "[" code:code "]" { return {"type": "code", "code": code} }
-choice = l:[A-Z] ")" ws? t:words { return {"type":"choice", "choice": l, "text": t}}
-nodebreak = "---"
+choice = l:[A-Z] ")" _ t:words { return {"type":"choice", "choice": l, "text": t}}
+nodebreak = "---" / nl nl
 dialogue = char:character txt:words { return {"type": "dialogue", "character": char, "text": txt} }
 
 
 // words for dialogue
-words = ws? w:(word ws?)+ { return w.flat().join("")}
+words = _ w:(word _)+ { return w.flat().join("")}
 word = l:wordChar+ {return l.join("")}
 	/ inline
 
 // names of characters
-character = n:name ":" ws? { return {"name":n} }
-	/ n:name ws? "[" c:varName "]" ":" ws? { return {"name": n, "emotion":c} }
+character = n:name ":" _ { return {"name":n} }
+	/ n:name _ "[" c:varName "]" ":" _ { return {"name": n, "emotion":c} }
 name = mrName
 	/ varName
 mrName = mr:varName ". " n:varName {return `${mr}. ${n}` }
 
 
 // code 
-code = setVar / jumplabel / goToLocation
-setVar = "set" ws v:varName ws? toEquals ws? l:literal {return `${v} = ${l}`}
-	/ "set" ws v:varName ws? o:operator ws? n:number { return `${v} ${o}= ${n}`}
-    / "set" ws v:varName d:doubleop { return `${v}${d}`}
+code = setVar / jumplabel / goToLocation / ifStatement
+
+setVar = "set" __ v:varName _ toEquals _ l:(literal / mathExp) {return `${v} = ${l}`}
+	/ "set" __ v:varName _ o:operator _ n:number { return `${v} ${o}= ${n}`}
+    / "set" __ v:varName d:doubleop { return `${v}${d}`}
 toEquals = "to" / "="
-jumplabel = "label" ws l:varName {return `Label: ${l}`}
-    / "jump" ws l:varName {return `Jump to ${l}`}
-goToLocation = teleportVerbs " to"? ws l:location {return `teleport to ${l.location}: ${l.state}`}
-    / goToVerbs " to"? ws l:location {return `navigate to ${l}`}
+
+jumplabel = "label" __ l:varName {return `Label: ${l}`}
+    / "jump" __ l:varName {return `Jump to ${l}`}
+
+goToLocation = teleportVerbs " to"? __ l:location {return `teleport to ${l.location}: ${l.state}`}
+    / goToVerbs " to"? __ l:location {return `navigate to ${l}`}
 goToVerbs =  "nav" / "navigate" / "goto" / "go"
 teleportVerbs = "teleport" / "move"
-location = l:varName ws? ":" ws? s:varName {return {"location": l, "state":s}}
-    / v:varName {return {"location": l, "state":"default"}}
+location = l:varName _ ":" _ s:varName {return {"location": l, "state":s}}
+    / l:varName {return {"location": l, "state":"default"}}
+
+ifStatement = i:("if" / "elseif" / "else if") __ e:exp __ c:code {return `${i} ${e} then ${c}`}
+    / "else" __ c:code {return `else ${c}`}
+exp = v:varName _ c:comparitor _ l:literal {return `${v} ${c} ${l}`}
+    / v:varName _ c:comparitor _ vv:varName {return `${v} ${c} ${v}`}
+
+mathExp = head:term tail:(_ ("+" / "-") _ term)* {
+    return tail.reduce(function(result, element) {
+    if (element[1] === "+") { return result + element[3]; }
+    if (element[1] === "-") { return result - element[3]; }
+    }, head);
+}
+
+term = head:factor tail:(_ ("*" / "/") _ factor)* {
+    return tail.reduce(function(result, element) {
+    if (element[1] === "*") { return result * element[3]; }
+    if (element[1] === "/") { return result / element[3]; }
+    }, head);
+}
+
+factor = "(" _ expr:mathExp _ ")" { return expr; }
+    / number
+
 
 // variables 
 inline = "@" v:varName "@" {return v}
@@ -58,9 +86,8 @@ string = "\"" str:words "\"" {return str}
 number = neg:"-"? num:digits { return neg ? parseInt(num, 10) * -1 : parseInt(num, 10)}
 
 // keywords
-ifelse = "if" / "elseif" / "else if" / "else"
 commands =  "goto" / "go to" / "teleport" "to"? / "nav" "to"? / "navigate" "to"? / "continue" / "input" / "new" / "objective" / "complete"
-comparitors = "==" / "equals" / "is" / "!=" / "isn't" / "<" / "lt" / "<=" / "lte" / ">" / "gt" / ">=" / "gte" / "&" / "and" / "|" / "or" 
+comparitor = "==" / "equals" / "is" / "!=" / "isn't" / "<" / "lt" / "<=" / "lte" / ">" / "gt" / ">=" / "gte" / "&" / "and" / "|" / "or" 
 operator = "+" / "-" / "/" / "*"
 doubleop = "++" / "--"
 
@@ -70,9 +97,12 @@ wordChar = letter / digits / punct
 digits = d:[0-9]+ {return d.join("")}
 
 // single characters
-punct = [.,-;!—#$%&*<>/~+=()]
+punct = [.,-;!?—#$%&*<>/~+=()] / "\"" / "\'"
 letter = [a-zA-Z]
 
 // whitespace
-ws = "\t"+ / " "+ 
-nl = "\n"
+nl = [\n\r]
+
+_ = [ \t]*
+
+__ = [ \t]+
