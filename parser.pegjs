@@ -5,12 +5,12 @@ main = _ l:lines+ _ {return l}
 lines = l:line nl? {return l}
 
 line = nodebreak {return {"type":"nodeBreak"}}
+    / comment
 	/ character nl
     / b:brackets 
 	/ c:choice
 	/ d:dialogue {return d}
     / w:words {return {"type": "narration", "text": w}}
-    / comment
 
 // top level categories
 nodebreak = "---" / nl
@@ -20,7 +20,7 @@ choice = newChoice / choiceVar
 dialogue = char:character txt:words { return {"type": "dialogue", "character": char, "text": txt} }
 
 // choice
-newChoice = l:[A-Z] ")" _ t:words { return {"type":"choice", "choice": l, "text": t} }
+newChoice = l:varName ")" _ t:words { return {"type":"choice", "choice": l, "text": t} }
 choiceVar = "choice"i __ v:varName ":"? {return {"type":"choice", "choice":v}}
 
 // words for dialogue
@@ -38,7 +38,7 @@ mrName = mr:varName ". " n:varName {return `${mr}. ${n}` }
 
 
 // code 
-code = setVar / jumplabel / goToLocation / ifStatement / achievement / continue / choiceVar / showImage / newObjective
+code = setVar / jumplabel / goToLocation / ifStatement / achievement / continue / choiceVar / showImage / newObjective / newLore
 
 setVar = "set"i __ v:varName _ toEquals _ l:(literal / mathExp) {return `${v} = ${l}`}
 	/ "set"i __ v:varName _ o:operator _ n:number { return `${v} ${o}= ${n}`}
@@ -49,7 +49,7 @@ jumplabel = "label"i __ l:varName {return `Label: ${l}`}
     / "jump"i __ l:varName {return `Jump to ${l}`}
 
 goToLocation = teleportVerbs ( _ ":" / __ "to")? __ l:location {return `teleport to ${l.location}: ${l.state}`}
-    / goToVerbs " to"i? __ l:location {return `navigate to ${l}`}
+    / goToVerbs " to"i? __ ":"? _ l:location {return `navigate to ${l.location}: ${l.state}`}
 goToVerbs =  "nav"i / "navigate"i / "goto"i / "go"i
 teleportVerbs = "teleport"i / "move"i / "new location"i
 location = l:varName _ ":" _ s:varName {return {"location": l, "state":s}}
@@ -58,6 +58,7 @@ location = l:varName _ ":" _ s:varName {return {"location": l, "state":s}}
 ifStatement = i:ifElse __ e:exp __ c:code {return `${i} ${e} then ${c}`}
     / "else"i _ c:code? {return `else ${c}`}
     / i:ifElse __ "choice"i? v:varName " was chosen"i {return `${i} ${v} branch was chosen`}
+    / i:ifElse __ v:varName c:comparitor vv:varName {return `${i} ${v} ${c} ${vv} then continue to this branch`}
 ifElse = i:("if"i / "elseif"i / "else if"i)
 exp = v:varName _ c:comparitor _ l:literal {return `${v} ${c} ${l}`}
     / v:varName _ c:comparitor _ vv:varName {return `${v} ${c} ${v}`}
@@ -71,6 +72,8 @@ cg = "cg"i / "image"i / "illustration"i
 
 newObjective = "new"i __ "objective"i _ ":"? t:words {return {"type":"objective", "status":"new", "text":t}}
     / "complete"i __ "objective"i _ ":"? t:words {return {"type":"objective", "status":"completed", "text":t}}
+
+newLore = "new"i? _ "lore"i _ ":"? _ t:words {return {"type":"lore", "text":t}}
 
 // arithmetic 
 mathExp = head:term tail:(_ ("+" / "-") _ term)* {
@@ -116,8 +119,9 @@ digits = d:[0-9]+ {return d.join("")}
 unknownSpeaker = "???"
 
 // single characters
-punct = [….,-;!?—#$%&*<>/~+=()’‘“”] / "\"" / "\'"
+punct = [….,-;!?—#$%&*<>/~+=()’‘“”♥] / "\"" / "\'"
 letter = [a-zA-Z]
+wildcard = .
 
 // whitespace
 nl = [\n\r]
