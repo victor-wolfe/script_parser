@@ -1,5 +1,3 @@
-// const peg = require("peggy")
-
 main = _ l:lines+ _ {return l}
 
 lines = l:line nl? {return l}
@@ -121,7 +119,6 @@ unknownSpeaker = "???"
 // single characters
 punct = [….,-;!?—#$%&*<>/~+=()’‘“”♥] / "\"" / "\'"
 letter = [a-zA-Z]
-wildcard = .
 
 // whitespace
 nl = [\n\r]
