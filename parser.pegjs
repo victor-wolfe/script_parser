@@ -4,7 +4,7 @@ lines = l:line nl? {return l}
 
 line = nodebreak {return {"type":"nodeBreak"}}
     / comment
-	/ character nl
+	/ c:character nl {return c}
     / b:brackets 
 	/ c:choice
 	/ d:dialogue {return d}
